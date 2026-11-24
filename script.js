@@ -248,49 +248,62 @@
   }
   $$('.roll').forEach(buildRoll);
 
-  /* the pump: three wheels that roll forward when you add and back when you take away */
-  const pump = { box: $('#wheels'), st: [], idx: [], value: -1 };
-  if (pump.box) {
-    pump.box.textContent = '';
-    for (let i = 0; i < 3; i++) {
-      const w = document.createElement('span');
-      w.className = 'wheel';
-      const st = strip();
-      w.appendChild(st);
-      pump.box.appendChild(w);
-      pump.st.push(st);
-      pump.idx.push(10);
-      place(st, 10);
+  /* the pump: rows of wheels (total sale and gallons) that roll forward when you add and back when you take away */
+  function Counter(box, pattern) {
+    this.st = [];
+    this.idx = [];
+    this.value = -1;
+    if (!box) return;
+    box.textContent = '';
+    for (const ch of pattern) {
+      if (ch === '#') {
+        const w = document.createElement('span');
+        w.className = 'wheel';
+        const st = strip();
+        w.appendChild(st);
+        box.appendChild(w);
+        this.st.push(st);
+        this.idx.push(10);
+        place(st, 10);
+      } else {
+        const s = document.createElement('span');
+        s.className = 'ch';
+        s.textContent = ch;
+        box.appendChild(s);
+      }
     }
   }
-  function rollPump(i, d, dir, dur) {
-    const st = pump.st[i];
-    let cur = MOTION ? -(G.getProperty(st, 'yPercent') / 100) * 30 : pump.idx[i];
+  Counter.prototype.turn = function (i, d, dir, dur) {
+    const st = this.st[i];
+    let cur = MOTION ? -(G.getProperty(st, 'yPercent') / 100) * 30 : this.idx[i];
     const curD = ((Math.round(cur) % 10) + 10) % 10;
     let next = dir > 0 ? Math.round(cur) + ((d - curD + 10) % 10) : Math.round(cur) - ((curD - d + 10) % 10);
     if (next > 27) { cur -= 10; next -= 10; }
     if (next < 2) { cur += 10; next += 10; }
-    pump.idx[i] = next;
+    this.idx[i] = next;
     if (!MOTION) { place(st, next); return; }
     G.set(st, { yPercent: pos(cur) });
     G.to(st, { yPercent: pos(next), duration: dur, ease: 'back.out(1.5)', overwrite: true });
-  }
-  function setPump(v, fromZero) {
-    if (!pump.st.length) return;
-    v = Math.max(0, Math.min(999, Math.round(v)));
-    if (v === pump.value && !fromZero) return;
-    const digits = String(v).padStart(3, '0').split('').map(Number);
-    const dir = fromZero || v >= pump.value ? 1 : -1;
-    pump.value = v;
+  };
+  Counter.prototype.set = function (v, fromZero) {
+    const n = this.st.length;
+    if (!n) return;
+    v = Math.max(0, Math.min(10 ** n - 1, Math.round(v)));
+    if (v === this.value && !fromZero) return;
+    const digits = String(v).padStart(n, '0').split('').map(Number);
+    const dir = fromZero || v >= this.value ? 1 : -1;
+    this.value = v;
     digits.forEach((d, i) => {
       if (fromZero && MOTION) {
-        pump.idx[i] = 10 + d + (i === 2 ? 10 : 0);
-        G.fromTo(pump.st[i], { yPercent: pos(10) }, { yPercent: pos(pump.idx[i]), duration: 0.9 + i * 0.3, ease: 'back.out(1.2)', overwrite: true });
+        this.idx[i] = 10 + d + (i === n - 1 ? 10 : 0);
+        G.fromTo(this.st[i], { yPercent: pos(10) }, { yPercent: pos(this.idx[i]), duration: 0.9 + (0.6 * i) / Math.max(1, n - 1), ease: 'back.out(1.2)', overwrite: true });
       } else {
-        rollPump(i, d, dir, 0.45 + (2 - i) * 0.08);
+        this.turn(i, d, dir, 0.45 + (n - 1 - i) * 0.08);
       }
     });
-  }
+  };
+  const galCount = new Counter($('#wheels'), '###');
+  const saleCount = new Counter($('#sale'), '####.##');
 
   /* ------------------------------------------------------------------ */
   /* Tell the dock: the pump is the form                                 */
@@ -299,6 +312,14 @@
   const gal = $('#gal');
   const fuel = () => (form ? (form.querySelector('input[name=grade]:checked') || {}).value || '' : '');
   const gallons = () => (fuel() && gal ? Number(gal.value) : 0);
+  // the price per gallon sits on each grade button (data-price) in index.html
+  const priceOf = (input) => (input && input.value ? Number(input.dataset.price) || 0 : 0);
+  const price = () => priceOf(form && form.querySelector('input[name=grade]:checked'));
+  const money = (cents) => (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  function setPump(v, fromZero) {
+    galCount.set(v, fromZero);
+    saleCount.set(Math.round(v * price() * 100), fromZero);
+  }
   const num = (v) => { const x = parseFloat(String(v).replace(',', '.')); return Number.isFinite(x) && x > 0 ? x : 0; };
   const short = (x) => String(Math.round(x * 10) / 10);
   const listJoin = (a) => (a.length < 2 ? a[0] || '' : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`);
@@ -344,9 +365,19 @@
     if (!form) return;
     const g = fuel();
     const v = gallons();
+    const p = price();
+    const total = Math.round(v * p * 100);
     if (gal) {
       gal.disabled = !g;
-      gal.setAttribute('aria-valuetext', `${gal.value} gallons`);
+      gal.setAttribute('aria-valuetext', g ? `${gal.value} gallons, about ${money(total)}` : `${gal.value} gallons`);
+    }
+    const now = $('#price-now');
+    if (now) {
+      const each = (val) => money(Math.round(priceOf(form.querySelector(`input[name=grade][value="${val}"]`)) * 100));
+      const name = g ? g[0].toUpperCase() + g.slice(1) : '';
+      now.textContent = !g ? `Gasoline is ${each('gasoline')} and diesel ${each('diesel')} a gallon.`
+        : v ? `${name} is ${money(Math.round(p * 100))} a gallon, so ${v} gallons come to about ${money(total)}.`
+          : `${name} is ${money(Math.round(p * 100))} a gallon.`;
     }
     $$('.step', form).forEach((b) => { b.disabled = !g; });
     if (rollIt) setPump(v, false);
@@ -436,11 +467,13 @@
 
   // 3. at the pumps: each word rolls up like a counter, the pump tilts as it passes
   $$('.stack li').forEach((li, i) => {
-    const sp = window.SplitText.create(li, { type: 'chars', mask: 'chars' });
+    const sp = window.SplitText.create($('.w', li) || li, { type: 'chars', mask: 'chars' });
     G.from(sp.chars, { yPercent: 118, duration: 0.8, ease: 'back.out(1.5)', stagger: 0.04, delay: i * 0.12, scrollTrigger: { trigger: '.stack', start: 'top 82%', once: true } });
     G.fromTo(li, { x: (i % 2 ? 1 : -1) * 12 }, { x: (i % 2 ? -1 : 1) * 12, ease: 'none', scrollTrigger: { trigger: '.pumps', start: 'top bottom', end: 'bottom top', scrub: true } });
   });
   G.fromTo('.object', { rotate: 12, yPercent: 14 }, { rotate: 2, yPercent: -8, ease: 'none', scrollTrigger: { trigger: '.pumps', start: 'top bottom', end: 'bottom top', scrub: true } });
+  // the fuel prices roll up on their wheels once the words are in
+  ST.create({ trigger: '.stack', start: 'top 82%', once: true, onEnter: () => $$('.stack .roll-vis').forEach((v, i) => G.delayedCall(0.55 + i * 0.2, () => roll(v))) });
   G.from('.house', { clipPath: 'inset(0% 0% 100% 0%)', duration: 1.2, ease: 'expo.out', scrollTrigger: { trigger: '.house', start: 'top 85%', once: true } });
   G.from('.pumps-text .lead-p', { y: 24, autoAlpha: 0, duration: 0.7, ease: 'power3.out', stagger: 0.1, scrollTrigger: { trigger: '.pumps-text', start: 'top 82%', once: true } });
 
@@ -455,7 +488,7 @@
     const n = legs.length;
     const tl = G.timeline({
       defaults: { ease: 'none' },
-      scrollTrigger: { trigger: sec, start: 'top top', end: () => `+=${Math.round(window.innerHeight * 2.4)}`, pin: true, scrub: 0.8, invalidateOnRefresh: true, refreshPriority: 1 },
+      scrollTrigger: { trigger: sec, start: 'top top', end: () => `+=${Math.round(window.innerHeight * 0.6 * n)}`, pin: true, scrub: 0.8, invalidateOnRefresh: true, refreshPriority: 1 },
     });
     tl.fromTo('.pan', { x: 0 }, { x: () => -dist(), duration: 1 }, 0)
       .to('.in-head', { autoAlpha: 0, y: -40, duration: 0.06, ease: 'power2.in' }, 1 / n - 0.07);
@@ -468,6 +501,15 @@
     });
     img.addEventListener('load', () => ST.refresh(), { once: true });
   })();
+
+  // 4b. the dock today: the marina's own photos rise in; on wide screens the columns drift apart
+  G.from('.shot', { y: 36, autoAlpha: 0, duration: 0.8, ease: 'power3.out', stagger: 0.07, scrollTrigger: { trigger: '.dock-grid', start: 'top 85%', once: true } });
+  mm.add('(min-width: 761px)', () => {
+    $$('.dock-col').forEach((c, i) => {
+      const a = [5, -5, 8, -4][i % 4];
+      G.fromTo(c, { yPercent: a }, { yPercent: -a, ease: 'none', scrollTrigger: { trigger: '.dock', start: 'top bottom', end: 'bottom top', scrub: true } });
+    });
+  });
 
   // 5. ashore: the photograph unfurls into a swallowtail flag
   G.fromTo('.shape', { '--notch': '100%' }, { '--notch': '74%', ease: 'none', scrollTrigger: { trigger: '.ashore', start: 'top 85%', end: 'top 25%', scrub: true } });
@@ -493,7 +535,7 @@
       type: 'lines',
       mask: 'lines',
       autoSplit: true,
-      onSplit: (self) => G.from(self.lines, { yPercent: 110, duration: 0.9, ease: 'expo.out', stagger: 0.09, scrollTrigger: { trigger: el, start: 'top 88%', once: true } }),
+      onSplit: (self) => G.from(self.lines, { yPercent: 110, autoAlpha: 0, duration: 0.9, ease: 'expo.out', stagger: 0.09, scrollTrigger: { trigger: el, start: 'top 88%', once: true } }),
     });
   });
 

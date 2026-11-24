@@ -48,6 +48,7 @@ img { display: block; max-width: 100%; height: auto; }
 h1, h2, h3 { margin: 0; text-wrap: balance; }
 p { margin: 0; text-wrap: pretty; }
 a { color: inherit; }
+a[href^="tel:"] { white-space: nowrap; }
 figure { margin: 0; }
 :focus-visible { outline: 3px solid var(--sign); outline-offset: 3px; }
 .sr { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; } /* taste-skill-ignore */
@@ -238,8 +239,8 @@ figure { margin: 0; }
   align-items: start;
   overflow: hidden;
 }
+.board { grid-area: stack; display: grid; gap: 16px; justify-items: start; align-content: start; }
 .stack {
-  grid-area: stack;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -255,6 +256,20 @@ figure { margin: 0; }
 .stack li:nth-child(2) { color: var(--sign); }
 .stack li:nth-child(3) { color: var(--sea); }
 .stack li:nth-child(4) { color: var(--ink); }
+.stack .w { display: block; }
+/* the price under each fuel, on number wheels like the pump's */
+.per {
+  display: flex;
+  align-items: baseline;
+  gap: .28em;
+  margin: .04em 0 .24em;
+  font-size: clamp(2.5rem, 1rem + 5vw, 6rem);
+}
+.unit { font: 800 .34em/1 var(--f-di); font-size: max(.34em, 20px); font-variation-settings: "opsz" 72; letter-spacing: .04em; }
+.board-note { max-width: 30em; font-size: var(--s-small); color: var(--soft); }
+.hours { justify-self: start; display: grid; gap: 4px; max-width: 30em; padding: 14px 18px; background: var(--fy); }
+.hours b { font: 800 var(--s-lead)/1.1 var(--f-di); font-variation-settings: "opsz" 72; letter-spacing: .02em; text-transform: uppercase; }
+.hours a { font-weight: 600; text-underline-offset: 3px; }
 .object { grid-area: object; align-self: center; transform: rotate(4deg); }
 .object img { width: 100%; }
 .pumps-text { grid-area: text; display: grid; gap: 18px; align-content: start; }
@@ -309,6 +324,8 @@ figure { margin: 0; }
   white-space: nowrap;
 }
 .leg p { margin-top: 6px; font-size: var(--s-lead); line-height: 1.35; }
+.leg a { font-weight: 600; text-underline-offset: 3px; }
+.passage:not(.is-pinned) .leg:first-child { grid-column: 1 / -1; }
 .passage.is-pinned { height: 100svh; }
 .passage.is-pinned .pan { right: auto; width: auto; }
 .passage.is-pinned .pan img { width: auto; max-width: none; height: 100%; }
@@ -331,6 +348,46 @@ figure { margin: 0; }
   text-align: center;
 }
 .ch { display: inline-block; height: 1em; line-height: 1; white-space: pre; }
+
+/* the dock today: the marina's own photographs, in columns that drift apart as you pass */
+.dock {
+  position: relative;
+  background: var(--wall);
+  padding: var(--pad) var(--g);
+  overflow: hidden;
+}
+.dock-head { display: grid; gap: 14px; max-width: 640px; margin-bottom: clamp(32px, 6vh, 64px); }
+.dock-head h2 { color: var(--sign); }
+.dock-head p { font-size: var(--s-lead); line-height: 1.4; max-width: 30em; }
+.dock-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(12px, 1.6vw, 24px);
+  align-items: start;
+}
+.dock-col { display: grid; gap: clamp(12px, 1.6vw, 24px); }
+.dock-col:nth-child(even) { margin-top: clamp(40px, 9vh, 120px); }
+.shot img { width: 100%; }
+.shot figcaption { margin-top: 8px; font-size: var(--s-small); color: var(--soft); }
+.dock-hint { display: none; }
+@media (max-width: 1100px) {
+  .dock-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .dock-grid {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    margin: 0 calc(-1 * var(--g));
+    padding: 0 var(--g) 10px;
+    scroll-padding: 0 var(--g);
+  }
+  .dock-col { display: contents; }
+  .shot { flex: 0 0 78vw; scroll-snap-align: start; }
+  .dock-hint { display: block; margin-top: 12px; font-size: var(--s-small); color: var(--soft); }
+}
 
 /* ashore */
 .ashore {
@@ -470,23 +527,25 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .reading {
   background: var(--ink);
   color: #fff;
-  padding: 16px 18px 12px;
+  padding: 18px 20px;
   display: grid;
-  justify-items: center;
-  gap: 4px;
+  grid-template-columns: auto auto;
+  justify-content: center;
+  align-items: center;
+  gap: 10px 20px;
 }
 .wheels {
   display: flex;
   gap: .08em;
   font-family: var(--f-st);
   font-weight: 900;
-  font-size: var(--s-display);
+  font-size: clamp(2.75rem, 1rem + 5vw, 6.5rem);
   line-height: 1;
   font-variation-settings: "opsz" 72;
   font-variant-numeric: tabular-nums;
 }
 .wheels .wheel { width: .62em; background: #0a0d18; }
-.reading-label { font-size: var(--s-small); font-weight: 600; letter-spacing: .04em; color: #d9dcea; }
+.reading-label { text-align: right; font-size: var(--s-small); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #d9dcea; }
 .gal-ctl { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; }
 .step {
   min-width: 64px;
@@ -575,6 +634,9 @@ a.c-row:hover { color: var(--sign); }
 @media (max-width: 640px) {
   .pump { grid-template-columns: minmax(0, 1fr); grid-template-areas: "face" "also" "boat" "out"; }
   .step { min-width: 56px; }
+  .reading { grid-template-columns: auto; justify-items: center; gap: 4px; }
+  .reading-label { text-align: center; }
+  .reading .wheels + .reading-label { margin-top: 10px; }
 }
 
 /* footer: the name flies in flags */
